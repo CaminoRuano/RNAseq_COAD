@@ -1,6 +1,7 @@
 
 
 
+
 ## RNAseq Analysis on Rstudio
 
 
@@ -31,6 +32,7 @@ library('GenomicDataCommons')
 library('dplyr')
 library('janitor')
 library('stringr')
+
 
 ### Download the data colon cancer samples###
 
@@ -119,20 +121,55 @@ metadata <- metadata %>%
 ### Parallelization 
 library("BiocParallel")
 register(MulticoreParam(4))
+register(SnowParam(4))
 
 ### Create DESeq file for normalization
-#### design ~ race + gender + ajcc_pathologic_t 
-    ## normalization for gender and race and comparison for pathologic_t
+#### design ~ race + gender + ajcc_pathologic_tm
+    ## normalization for gender and race and comparison for pathologic_m
 
-data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design = ~ gender + race + ajjc_pathologic_t)
- 
+data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design =~gender + race + ajcc_pathologic_m)
+
+
+###  Metadata survey
+
+  ## PCA of the raw data
+
+  library('PCAtools')
+
+  vst = assay(vst(data))
+  p = pca(vst, metadata=colData(data), removeVar=0.1)
+  pairsplot(p, components= getComponents(p, c(1:6)), colby='site_of_resection_or_biopsy')
+
+  biplot(p, showLoadings=FALSE, colby='ethnicity', lab=paste0(p$metadata$ajcc_pathologic_m))
+
+  eigencorplot(p, components= getComponents(p, 1:20), 
+             metavars=c("treatment_or_therapy","ajcc_pathologic_m", "ajcc_pathologic_t",
+                        "ajcc_pathologic_n", "ethnicity", "gender", "morphology", 'icd_10_code',
+                        "primary_diagnosis", "ajcc_staging_system_edition", "ajcc_pathologic_stage",
+                        "year_of_birth", "prior_treatment", "site_of_resection_or_biopsy"),
+             corMultipleTestCorrection = 'BH')
+
+  ## Pearson correlation between metadata information
+  
+  library(corrplot)
+
+  metadata<- mutate_all(metadata, function(x) as.numeric(as.factor(x)))
+
+  
+  M = cor(metadata)
+  res1 <- cor.mtest(metadata, conf.level = .95)
+  
+  corrplot(M, na.label=" ",insig = 'blank')
+  
+
+  
 ### remove rows with very low number of reads
 keep <- rowSums(counts(data)) >= 10
 data <- data[keep,]
 dim(data)
 
 
-data$ajcc_pathologic_n <- relevel(data$ajcc_pathologic_t, ref = "T1")
+data$ajcc_pathologic_m <- relevel(data$ajcc_pathologic_m, ref = "M0")
 
 
 
@@ -140,11 +177,28 @@ data$ajcc_pathologic_n <- relevel(data$ajcc_pathologic_t, ref = "T1")
   ### log2 tables + Wald test for p-value
   ### comparison with the LAST variable of the design : "race"
   ### reference level = 
-data = DESeq(data, test=c("Wald"))
+data_norm = DESeq(data, test=c("Wald"))
 
+
+### PCA observation
+
+library('PCAtools')
+vst = assay(vst(data))
+p = pca(vst, metadata=colData(data), removeVar=0.1)
+
+biplot(p, showLoadings=FALSE, colby='ajcc_pathologic_m', lab=paste0(p$metadata$ajcc_pathologic_m))
+
+eigencorplot(p, components= getComponents(p, 1:20), 
+             metavars=c("treatment_or_therapy","ajcc_pathologic_m", "ajcc_pathologic_t",
+                        "ajcc_pathologic_n", "ethnicity", "gender", "morphology", 'icd_10_code',
+                        "primary_diagnosis", "ajcc_staging_system_edition", "ajcc_pathologic_stage",
+                        "year_of_birth", "prior_treatment"),
+             corFun='Pearson', corMultipleTestCorrection = 'BH')
+
+screeplot(p, axisLabSize=18, titleLabSize=22)
 ########### check results
 normCounts <-  counts(data, normalized=T)
-View(normCounts)
+head(normCounts)
 
 res <- DESeq2::results(data, alpha=0.05)
 
@@ -157,19 +211,13 @@ res = res[order(res$padj),]
 annotation= read.
 
 
-### is ethnicity/sex/age involved in the question
+### is ethnicity/sex/age involved in the question??
 
 
+                        
 ##### DESeq2 normalization
 
-
 featureData <- data.frame(gene=rownames(data))
-
-
-
-
-
-
 
 
 dds <- DESeq(data)
@@ -183,3 +231,7 @@ plotPCA(data, intgroup = "ajcc_pathologic_n", ntop = 500, returnData = FALSE)
 
 
 data$ajcc_pathologic_stage <- relevel(data$ajcc_pathologic_stage, ref = "untreated")
+
+
+
+
