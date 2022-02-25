@@ -1,28 +1,143 @@
-Presentation
+RNASeq Analysis of Colon adenocarcinoma samples
 ========================================================
-author: 
-date: 
+author: Camino Ruano
+date: 24/02/2022
 autosize: true
 
-First Slide
+Colon adenocarcinoma COAD 
 ========================================================
 
-For more details on authoring R presentations please visit <https://support.rstudio.com/hc/en-us/articles/200486468>.
+454 samples
 
-- Bullet 1
-- Bullet 2
-- Bullet 3
+- htSeq (raw counts)
+- Metadata
+- File names
 
-Slide With Code
+
+Workflow
 ========================================================
 
-```{r}
-summary(cars)
+htSeq (raw counts) ----> DESeqDataSet ----> Normalization (DESeq2)  ----> Contrast of interest ----> Results :)
+
+
+
+
+1) Creating DESeqDataSet and design model
+========================================================
+
+Test treatment (yes/no) controlling for both gender and race:
+
+
+
+data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design = ~ gender + race + treatment_or_therapy)
+
+
+
+
+PCA of the normalized counts
+========================================================
+DESeq2:
+
+a) gene length
+b) read depth
+c) linear model
+d) Contrast matrix test (Wald test)
+
+```{r, fig.asp = 1, fig.width = 20 }
+
+setwd("C://Users/Camino/Documents/EpigeneLabs/")
+library(DESeq2)
+data_norm = readRDS("./htseq_normalized.rds")
+
+vsp = (vst(data_norm))
+
+DESeq2::plotPCA(vsp, intgroup=c("treatment_or_therapy"))
 ```
 
-Slide With Plot
+
+
+**Results treatment**
 ========================================================
 
-```{r, echo=FALSE}
-plot(cars)
+DESeq2:
+
+a) gene length
+b) read depth
+c) linear model
+d) Contrast matrix test (Wald test)
+
+```{r}
+res <- DESeq2::results(data_norm, alpha=0.05)
+
+summary(res)
+
+```
+
+
+```{r}
+res = res[order(res$padj),]
+
+head(res)
+```
+
+Volcano Plot
+========================================================
+```{r, fig.width=10,fig.height=11}
+library(ggplot2)
+library(DESeq2)
+
+res <- DESeq2::results(data_norm, contrast = c("treatment_or_therapy","no","yes"))
+res$sig <- ifelse(res$padj<0.05, "yes","no")
+
+#plotVolcano
+ggplot(as.data.frame(res), aes(x=log2FoldChange, y= -log10(padj), color=sig)) + geom_point()
+
+
+
+```
+
+
+
+Pearson correlation Covariates metadata
+========================================================
+```{r, fig.width=10,fig.height=11}
+resApeT <- lfcShrink(data_norm, coef=2, type="apeglm", lfcThreshold=1)
+plotMA(resApeT, ylim=c(-3,3), cex=.8)
+abline(h=c(-1,1), col="dodgerblue", lwd=2)
+```
+
+
+
+plot DEGs
+==============================================================
+par(mfrow=c(2,3))
+```{r}
+plotCounts(dds, gene="ENSG00000152583", intgroup="dex")
+plotCounts(dds, gene="ENSG00000179094", intgroup="dex")
+plotCounts(dds, gene="ENSG00000116584", intgroup="dex")
+plotCounts(dds, gene="ENSG00000189221", intgroup="dex")
+plotCounts(dds, gene="ENSG00000120129", intgroup="dex")
+plotCounts(dds, gene="ENSG00000148175", intgroup="dex")
+```
+
+
+
+clustering and heatmap
+==============================================================
+
+
+```{r}
+## varianceStabilizingTransformation normalization for heatmaps and clustering
+
+vsp = (vst(data_norm))
+
+DESeq2::plotPCA(vsp, intgroup=c("site_of_resection_or_biopsy"))
+
+
+### Hierarchical clustering
+
+sampleDists <- dist(t(vsp),  method = "euclidean")
+
+clusters=hclust(sampleDists)
+plot(clusters)
 ```
