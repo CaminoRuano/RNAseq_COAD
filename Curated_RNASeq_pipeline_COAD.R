@@ -1,6 +1,8 @@
 
 
 
+
+
 ## RNAseq Analysis on Rstudio
 
 
@@ -126,39 +128,39 @@ register(SnowParam(4))
 #### design ~ race + gender + ajcc_pathologic_tm
 ## normalization for gender and race and comparison for pathologic_m
 
-data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design =~gender + race + ajcc_pathologic_m)
+data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design =~gender + race + treatment_or_therapy)
 
 
 ###  Metadata survey
 
-## PCA of the raw data
+  ## PCA of the raw data
 
-library('PCAtools')
+   library('PCAtools')
 
-vst = assay(vst(data))
-p = pca(vst, metadata=colData(data), removeVar=0.1)
-pairsplot(p, components= getComponents(p, c(1:6)), colby='site_of_resection_or_biopsy')
+    vst = assay(vst(data))
+      p = pca(vst, metadata=colData(data), removeVar=0.1)
+      pairsplot(p, components= getComponents(p, c(1:6)), colby='treatment_or_therapy"')
 
-biplot(p, showLoadings=FALSE, colby='ethnicity', lab=paste0(p$metadata$ajcc_pathologic_m))
+      biplot(p, showLoadings=FALSE, colby='ethnicity', lab=paste0(p$metadata$treatment_or_therapy))
 
-eigencorplot(p, components= getComponents(p, 1:20), 
+      eigencorplot(p, components= getComponents(p, 1:20), 
              metavars=c("treatment_or_therapy","ajcc_pathologic_m", "ajcc_pathologic_t",
                         "ajcc_pathologic_n", "ethnicity", "gender", "morphology", 'icd_10_code',
                         "primary_diagnosis", "ajcc_staging_system_edition", "ajcc_pathologic_stage",
                         "year_of_birth", "prior_treatment", "site_of_resection_or_biopsy"),
              corMultipleTestCorrection = 'BH')
 
-## Pearson correlation between metadata information
+  ## Pearson correlation between metadata information
 
-library(corrplot)
+      library(corrplot)
 
-metadata<- mutate_all(metadata, function(x) as.numeric(as.factor(x)))
+    metadata<- mutate_all(metadata, function(x) as.numeric(as.factor(x)))
 
 
-M = cor(metadata)
-res1 <- cor.mtest(metadata, conf.level = .95)
+      M = cor(metadata)
+      res1 <- cor.mtest(metadata, conf.level = .95)
 
-corrplot(M, na.label=" ",insig = 'blank')
+      corrplot(M, na.label=" ",insig = 'blank')
 
 
 
@@ -168,69 +170,61 @@ data <- data[keep,]
 dim(data)
 
 
-data$ajcc_pathologic_m <- relevel(data$ajcc_pathologic_m, ref = "M0")
+data$ajcc_pathologic_m <- relevel(data$treatment_or_therapy, ref = "no")
 
 
 
 ### main DESeq (normalize counts for gene lenght and depth of read)
 ### log2 tables + Wald test for p-value
-### comparison with the LAST variable of the design : "race"
-### reference level = 
+### comparison with the LAST variable of the design : "treatment_or_therapy"
+### reference level = no
+
+
 data_norm = DESeq(data, test=c("Wald"))
 
 
 ### PCA observation
 
-library('PCAtools')
-vst = assay(vst(data))
-p = pca(vst, metadata=colData(data), removeVar=0.1)
 
-biplot(p, showLoadings=FALSE, colby='ajcc_pathologic_m', lab=paste0(p$metadata$ajcc_pathologic_m))
+vsp = (vst(data_norm))
 
-eigencorplot(p, components= getComponents(p, 1:20), 
-             metavars=c("treatment_or_therapy","ajcc_pathologic_m", "ajcc_pathologic_t",
-                        "ajcc_pathologic_n", "ethnicity", "gender", "morphology", 'icd_10_code',
-                        "primary_diagnosis", "ajcc_staging_system_edition", "ajcc_pathologic_stage",
-                        "year_of_birth", "prior_treatment"),
-             corFun='Pearson', corMultipleTestCorrection = 'BH')
+DESeq2::plotPCA(vsp, intgroup=c("treatment_or_therapy")) + geom_point(size=5) + theme(axis.text=element_text(size=12),axis.title=element_text(size=14,face="bold"))
 
-screeplot(p, axisLabSize=18, titleLabSize=22)
 ########### check results
-normCounts <-  counts(data, normalized=T)
+
+normCounts <-  counts(data_norm, normalized=T)
 head(normCounts)
 
-res <- DESeq2::results(data, alpha=0.05)
+
+### perform contrast
+
+res <- DESeq2::results(data_norm, alpha=0.05)
 
 summary(res)
 
 res = res[order(res$padj),]
 
-##annotation
-
-annotation= read.
-
-
-### is ethnicity/sex/age involved in the question
-
-
-##### DESeq2 normalization
-
-
-featureData <- data.frame(gene=rownames(data))
 
 
 
 
+## plot PCA with vst (variance stabilizing transformations)
+
+vsp = (vst(data_norm))
+
+DESeq2::plotPCA(vsp, intgroup=c("treatment_or_therapy")) + geom_point(size=5) + theme(axis.text=element_text(size=12),axis.title=element_text(size=14,face="bold"))
+
+
+#### visualization  and ranking of DEGs
+
+resultsNames(data_norm)
+
+resApeT <- lfcShrink(data_norm, coef="treatment_or_therapy_yes_vs_no", type="apeglm", lfcThreshold=1)
+plotMA(resApeT, ylim=c(-3,3), cex=.8)
+abline(h=c(-1,1), col="dodgerblue", lwd=2)
 
 
 
-
-dds <- DESeq(data)
-res <- results(dds)
-res
-
-
-plotPCA(data, intgroup = "ajcc_pathologic_n", ntop = 500, returnData = FALSE)
 
 
 
