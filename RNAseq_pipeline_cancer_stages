@@ -2,6 +2,8 @@
 
 
 
+
+
 ## RNAseq Analysis on Rstudio
 
 
@@ -118,7 +120,7 @@ class(metadata$case_id)
 metadata <- metadata %>%
   dplyr::mutate_at("File.Name", str_replace, ".gz", "")
 
-#### pool cancer stage information
+
 
 metadata$ajcc_pathologic_stage = gsub("A","", as.factor(metadata$ajcc_pathologic_stage))
 metadata$ajcc_pathologic_stage = gsub("B","", as.factor(metadata$ajcc_pathologic_stage))
@@ -150,30 +152,35 @@ register(SnowParam(4))
 data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design =~gender + race + stage)
 
 
-###  Metadata survey
+saveRDS(data, "./data_stage.rds")
+
+hist(data@assays@data@listData$counts)
+
+
+  ###  Metadata survey
 
   ## PCA of the raw data
 
    library('PCAtools')
 
-    vst = assay(vst(data))
-      p = pca(vst, metadata=colData(data), removeVar=0.1)
+    vst = varianceStabilizingTransformation(data)
+      p = pca(assay(vst), metadata=colData(data), removeVar=0)
       pairsplot(p, components= getComponents(p, c(1:6)), colby='treatment_or_therapy"')
 
-      biplot(p, showLoadings=FALSE, colby='ethnicity', lab=paste0(p$metadata$treatment_or_therapy))
+      biplot(p, showLoadings=FALSE, colby='gender', lab=paste0(metadata$ethnicity))
 
       eigencorplot(p, components= getComponents(p, 1:20), 
              metavars=c("treatment_or_therapy","ajcc_pathologic_m", "ajcc_pathologic_t",
                         "ajcc_pathologic_n", "ethnicity", "gender", "morphology", 'icd_10_code',
                         "primary_diagnosis", "ajcc_staging_system_edition", "ajcc_pathologic_stage",
-                        "year_of_birth", "prior_treatment", "site_of_resection_or_biopsy", "stage"),
+                        "year_of_birth", "prior_treatment", "site_of_resection_or_biopsy","stage"),
              corMultipleTestCorrection = 'BH')
 
   ## Pearson correlation between metadata information
 
       library(corrplot)
 
-       metadata<- mutate_all(metadata, function(x) as.numeric(as.factor(x)))
+    metadata<- mutate_all(metadata, function(x) as.numeric(as.factor(x)))
 
 
       M = cor(metadata)
@@ -192,9 +199,89 @@ data$stage
 
 
 ### main DESeq (normalize counts for gene lenght and depth of read)
-### log2 tables + Wald test for p-value
-### comparison with the LAST variable of the design : "stage"
-### reference level = early
+  ### log2 tables + Wald test for p-value
+  ### comparison with the LAST variable of the design : "stage" while previous variables are normalize for
+    ### reference level = early
+    ### There are NOT replicates
 
 
-data_norm = DESeq(data, test=c("Wald"))
+data$stage<- relevel(data$stage, ref = "early")
+levels(data$stage)
+
+
+# Run DESeq2
+
+data_norm = DESeq(data)
+
+saveRDS(data_norm, file="./Data_norm_stage.rds")
+
+### PCA observation
+
+
+vsp = (vst(data_norm))
+
+DESeq2::plotPCA(vsp, intgroup=c("stage")) + geom_point(size=5) + theme(axis.text=element_text(size=12),axis.title=element_text(size=14,face="bold"))
+
+########### check results
+
+normCounts <-  counts(data_norm, normalized=T)
+head(normCounts)
+
+
+
+
+
+### perform contrast
+
+res <- DESeq2::results(data_norm, alpha=0.05)
+
+
+sum(res$padj < 0.05, na.rm=TRUE)
+summary(res)
+
+res = res[order(res$padj),]
+
+
+#check the most significant DEG
+head(res)
+
+
+#### visualization  and ranking of DEGs
+
+  ## without shinking the low count genes
+      plotMA(res, ylim=c(-3,3)) + geom_point(size=8)
+
+  ### shrinking 
+    resultsNames(data_norm)
+
+      resApeT <- lfcShrink(data_norm, coef="stage_late_vs_early", type="apeglm", lfcThreshold=1)
+        plotMA(resApeT, ylim=c(-3,3), cex=.8)
+        abline(h=c(-1,1), col="dodgerblue", lwd=2)
+
+
+
+        
+plotCounts(data_norm, gene=which.min(res$padj), intgroup="stage")
+
+
+
+
+### heatmap
+
+library("pheatmap")
+select <- order(rowMeans(counts(data_norm,normalized=TRUE)),
+                decreasing=TRUE)[1:20]
+ntd <- normTransform(data_norm)
+df <- as.data.frame(colData(data_norm)[,c("stage","ethnicity")])
+pheatmap(assay(ntd)[select,], cluster_rows=FALSE, show_rownames=FALSE,
+         cluster_cols=FALSE, annotation_col=df)
+
+
+sampleDists <- dist(t(assay(vst)))
+
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+sampleDistMatrix <- as.matrix(sampleDists)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
