@@ -2,66 +2,116 @@ RNASeq Analysis of Colon adenocarcinoma samples
 ========================================================
 author: Camino Ruano
 date: 24/02/2022
-autosize: true
 
-Colon adenocarcinoma COAD 
+
+Data Download
 ========================================================
 
-454 samples
+Colon adenocarcinoma COAD - 454 samples
 
 - htSeq (raw counts)
-- Metadata
-- File names
+- Metadata (clinical information)
+- File names (matching the htSeq with the metadata)
 
+
+
+Files clean up
+===============================================================
+
+- Duplicates
+- No informative columns
+- Merge Filenames with Metadata
+- Add new variables of interest
+
+
+
+Find DEGs between cancer stages : DESeq2
+========================================================
+
+- Assumes there are no DEGs
+
+- 1) differences in library sizes (differences in sequencing depth between samples)
+- 2) differences in library composition (if one gene is not expressed, the reads of the other genes will have higher amount of reads)
+- 3) genes with 0 counts in 1 or more samples are removed --> help to scale on housekeeping genes/you can use data from different tissues together
+- 4) "geometric" normalisation strategy (ratio of reads/average reads across samples) --> removal of outliers and more intered on moderated genes
+
+*** Does NOT normalize for GENE LENGHT since it uses log transforms ***
 
 Workflow
 ========================================================
-
-htSeq (raw counts) ----> DESeqDataSet ----> Normalization (DESeq2)  ----> Contrast of interest ----> Results :)
-
-
+htSeq (raw counts) ---> DESeqDataSet ---> DESeq2  ---> Contrast of interest ---> DEGs
 
 
 1) Creating DESeqDataSet and design model
 ========================================================
 
-Test treatment (yes/no) controlling for both gender and race:
+Test stage (early/late) controlling for both gender and race
+
+
+data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design = ~ gender + race + stage)
 
 
 
-data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design = ~ gender + race + treatment_or_therapy)
-
-
-
-
-2) Normalize counts
-========================================================
-DESeq2:
-
-a) gene length
-b) read depth
-c) linear model
-d) Contrast matrix test (Wald test)
-
-
-
-```{r, fig.asp = 1, fig.width = 20, echo=FALSE }
-
+1.1) Counts
+==================================================
+```{r, fig.asp = 1, fig.width = 20, echo=FALSE}
 setwd("C://Users/Camino/Documents/EpigeneLabs/")
 library(DESeq2)
-data_norm = readRDS("./htseq_normalized.rds")
+library(ggplot2)
+data <- readRDS("~/EpigeneLabs/data_stage.rds")
+head(data_norm@assays@data@listData$counts)
+vst = readRDS("./data_stage_vst.rds")
 
-vsp = (vst(data_norm))
-
-DESeq2::plotPCA(vsp, intgroup=c("treatment_or_therapy")) + geom_point(size=5) + theme(axis.text=element_text(size=12),axis.title=element_text(size=14,face="bold"))
-
-
+par(mfrow=c(2,1))
+hist(data_norm@assays@data@listData$counts)
+hist(assay(vst))
 ```
 
 
 
+1.2) PCA by stage
+==================================================
+```{r, fig.asp = 1, fig.width = 20, echo=FALSE}
 
-Results
+setwd("C://Users/Camino/Documents/EpigeneLabs/")
+library(DESeq2)
+library(ggplot2)
+data_norm <- readRDS("~/EpigeneLabs/Data_norm_stage.rds")
+
+vsp = (vst(data_norm))
+
+vst = readRDS("./data_stage_vst.rds")
+par(mfrow=c(2,1))
+
+plotPCA(vst, intgroup=c("stage"))+ geom_point(size=5) + theme(axis.text=element_text(size=12),axis.title=element_text(size=14,face="bold"))
+
+```
+
+
+1.3) PCA by site of biopsy
+==================================================
+```{r, fig.asp = 2, fig.width = 30, echo=FALSE}
+plotPCA(vst, intgroup=c("site_of_resection_or_biopsy"))
+```
+
+1.4) Check correlation between metadata and PCs
+========================================================
+
+How our metadata correlates with the first 20 PCs?
+
+```{r, fig.asp = 1, fig.width = 20, echo=FALSE}
+p = readRDS("./p_for_pca.rds")
+library(PCAtools)
+PCAtools::eigencorplot(p, components= getComponents(p, 1:20), metavars=c("treatment_or_therapy","ajcc_pathologic_m","ajcc_pathologic_t","ajcc_pathologic_n", "ethnicity", "gender", "morphology", 'icd_10_code', "primary_diagnosis", "ajcc_staging_system_edition", "ajcc_pathologic_stage", "year_of_birth", "prior_treatment","site_of_resection_or_biopsy","stage"),corMultipleTestCorrection = 'BH')
+```
+
+Is it because batch effects?
+Genetic differences?
+Collection heterogeneity?
+Microbione?
+
+
+Results - Early vs late stages
 ========================================================
 
 ```{r}
@@ -82,18 +132,18 @@ head(res)
 
 MA with/without shrinkage
 ========================================================
-MA gene expression
+MA plot
 ```{r, fig.asp = 1, fig.width = 20 }
-plotMA(res, ylim=c(-5,5))
+plotMA(res, ylim=c(-3,3)) + geom_point(size=8)
 ```
 
 Visualization and ranking of DEGs
 ==================================
-shrinkage of log2f in order to remove noise from low expressed genes 
+Shrinkage of log2f in order to remove noise from low expressed genes thus able to see better the differences in possible DEGs.
 
-```{r, fig.asp = 1, fig.width = 20 }
-resApeT <- lfcShrink(data_norm, coef="treatment_or_therapy_yes_vs_no", type="apeglm", lfcThreshold=1)
-plotMA(resApeT, ylim=c(-3,3), cex=.8)
+```{r, fig.asp = 1, fig.width = 20 , echo=FALSE}
+resApeT <- readRDS("~/EpigeneLabs/resApeT_stage.rds")
+plotMA(resApeT, ylim=c(-5,5), cex=.8)
 abline(h=c(-1,1), col="dodgerblue", lwd=2)
 ```
 
@@ -101,11 +151,11 @@ abline(h=c(-1,1), col="dodgerblue", lwd=2)
 
 Volcano Plot
 ========================================================
-```{r, fig.asp = 1, fig.width = 20 }
+```{r, fig.asp = 1, fig.width = 20 , echo=FALSE}
 library(ggplot2)
 library(DESeq2)
 
-res <- DESeq2::results(data_norm, contrast = c("treatment_or_therapy","no","yes"))
+res <- DESeq2::results(data_norm, contrast = c("stage","early","late"))
 res$sig <- ifelse(res$padj<0.05, "yes","no")
 
 #plotVolcano
@@ -116,37 +166,48 @@ ggplot(as.data.frame(res), aes(x=log2FoldChange, y= -log10(padj), color=sig)) + 
 
 
 
-plot DEGs counts
+plot most significant DEGs
 ==============================================================
-par(mfrow=c(2,3))
+
 ```{r, echo=FALSE }
 par(mfrow=c(2,3))
-plotCounts(dds, gene="ENSG00000226279.2 ", intgroup="treatment_or_therapy")
-plotCounts(dds, gene="ENSG00000230228.2", intgroup="treatment_or_therapy")
-plotCounts(dds, gene="ENSG00000228709.1 ", intgroup="treatment_or_therapy")
-plotCounts(dds, gene="ENSG00000248318.1", intgroup="treatment_or_therapy")
-plotCounts(dds, gene="ENSG00000120129", intgroup="treatment_or_therapy")
-plotCounts(dds, gene="ENSG00000148175", intgroup="treatment_or_therapy")
+plotCounts(vsp, gene="ENSG00000139219.16", intgroup="stage")
+plotCounts(vsp, gene="ENSG00000197061.4", intgroup="stage")
+plotCounts(vsp, gene="ENSG00000141750.6", intgroup="stage")
+plotCounts(vsp, gene="ENSG00000167244.16", intgroup="stage")
+plotCounts(data_norm, gene="ENSG00000229344.1", intgroup="stage")
+plotCounts(data_norm, gene="ENSG00000066405.11", intgroup="stage")
+
+```
+plot highest fold change
+=============================================================
+
+```{r, echo=FALSE }
+plotCounts(data_norm, gene="ENSG00000187772.6", intgroup="stage")
+plotCounts(data_norm, gene="ENSG00000066405.11", intgroup="stage")
+plotCounts(data_norm, gene="ENSG00000271201.1", intgroup="stage")
 
 ```
 
 
-```{r, echo=FALSE }
-plotCounts(res, gene=which.min(res$padj), intgroup="condition")
-```
-
-
-clustering and heatmap
+Clustering
 ==============================================================
 
 
-```{r}
+```{r, echo=FALSE}
 ## varianceStabilizingTransformation normalization for heatmaps and clustering
 
-sampleDists <- dist(t(vsp),  method = "euclidean")
+sampleDists <- dist(t(vst),  method = "euclidean")
 
 clusters=hclust(sampleDists)
 
 plot(clusters)
 ```
 
+Heatmap
+======================================================
+```{r}
+vsd <- vst(data_norm , blind=FALSE)
+rld <- rlog(data_norm , blind=FALSE)
+head(assay(vsd), 3)
+```
