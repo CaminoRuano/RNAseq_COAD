@@ -8,4 +8,4 @@ RNAseq pipeline for colorectal cancer samples from TCGA-COAD (https://portal.gdc
 
 - RNASeq_pipeline_treatment.R: RNASeq pipeline for DEGs in treatment (yes/no)
 
-- Markdown for presentation 03/03/2022
+- Presentation.Rpres: Markdown for presentation 03/03/2022
