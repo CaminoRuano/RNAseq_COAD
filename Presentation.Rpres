@@ -33,9 +33,9 @@ Find DEGs between cancer stages : DESeq2
 - 1) differences in library sizes (differences in sequencing depth between samples)
 - 2) differences in library composition (if one gene is not expressed, the reads of the other genes will have higher amount of reads)
 - 3) genes with 0 counts in 1 or more samples are removed --> help to scale on housekeeping genes/you can use data from different tissues together
-- 4) "geometric" normalisation strategy (ratio of reads/average reads across samples) --> removal of outliers and more intered on moderated genes
+- 4) "geometric" normalisation strategy (ratio of reads/average reads across samples) --> removal of outliers and more interest on moderated genes
 
-*** Does NOT normalize for GENE LENGHT since it uses log transforms ***
+*** Does NOT normalize for GENE LENGHT since it uses log transforms *** --> Apparently is not that important?
 
 Workflow
 ========================================================
@@ -46,6 +46,8 @@ htSeq (raw counts) ---> DESeqDataSet ---> DESeq2  ---> Contrast of interest --->
 ========================================================
 
 Test stage (early/late) controlling for both gender and race
+- Black Americans have been associated with a 20% higher risk of colon cancer
+- Higher mortality rates in male vs females
 
 
 data = DESeqDataSetFromHTSeqCount(sampleTable = metadata, directory = "./GDCdata", design = ~ gender + race + stage)
@@ -59,11 +61,10 @@ setwd("C://Users/Camino/Documents/EpigeneLabs/")
 library(DESeq2)
 library(ggplot2)
 data <- readRDS("~/EpigeneLabs/data_stage.rds")
-head(data_norm@assays@data@listData$counts)
 vst = readRDS("./data_stage_vst.rds")
 
 par(mfrow=c(2,1))
-hist(data_norm@assays@data@listData$counts)
+hist(data@assays@data@listData$counts)
 hist(assay(vst))
 ```
 
@@ -71,7 +72,7 @@ hist(assay(vst))
 
 1.2) PCA by stage
 ==================================================
-```{r, fig.asp = 1, fig.width = 20, echo=FALSE}
+```{r, fig.asp = 1, fig.width = 10, echo=FALSE}
 
 setwd("C://Users/Camino/Documents/EpigeneLabs/")
 library(DESeq2)
@@ -90,8 +91,8 @@ plotPCA(vst, intgroup=c("stage"))+ geom_point(size=5) + theme(axis.text=element_
 
 1.3) PCA by site of biopsy
 ==================================================
-```{r, fig.asp = 2, fig.width = 30, echo=FALSE}
-plotPCA(vst, intgroup=c("site_of_resection_or_biopsy"))
+```{r, fig.asp = 1, fig.width =15, echo=FALSE}
+plotPCA(vst, intgroup=c("site_of_resection_or_biopsy"))+ geom_point(size=5) + theme(axis.text=element_text(size=12),axis.title=element_text(size=14,face="bold"))
 ```
 
 1.4) Check correlation between metadata and PCs
@@ -99,8 +100,8 @@ plotPCA(vst, intgroup=c("site_of_resection_or_biopsy"))
 
 How our metadata correlates with the first 20 PCs?
 
-```{r, fig.asp = 1, fig.width = 20, echo=FALSE}
-p = readRDS("./p_for_pca.rds")
+```{r, fig.asp = 1, fig.width = 15, echo=FALSE}
+p = readRDS("~/EpigeneLabs/p_for_pca.rds")
 library(PCAtools)
 PCAtools::eigencorplot(p, components= getComponents(p, 1:20), metavars=c("treatment_or_therapy","ajcc_pathologic_m","ajcc_pathologic_t","ajcc_pathologic_n", "ethnicity", "gender", "morphology", 'icd_10_code', "primary_diagnosis", "ajcc_staging_system_edition", "ajcc_pathologic_stage", "year_of_birth", "prior_treatment","site_of_resection_or_biopsy","stage"),corMultipleTestCorrection = 'BH')
 ```
@@ -111,10 +112,10 @@ Collection heterogeneity?
 Microbione?
 
 
-Results - Early vs late stages
+2) Results - Late vs early stages
 ========================================================
 
-```{r}
+```{r, echo=FALSE}
 res <- DESeq2::results(data_norm, alpha=0.05)
 
 summary(res)
@@ -122,7 +123,7 @@ summary(res)
 ```
 
 
-```{r}
+```{r, echo=FALSE}
 res = res[order(res$padj),]
 
 head(res)
@@ -130,28 +131,28 @@ head(res)
 ```
 
 
-MA with/without shrinkage
+2.1) MA with/without shrinkage
 ========================================================
 MA plot
-```{r, fig.asp = 1, fig.width = 20 }
-plotMA(res, ylim=c(-3,3)) + geom_point(size=8)
+```{r, fig.asp = 1, fig.width = 10 , echo=FALSE}
+plotMA(res, ylim=c(-3,3)) + geom_point(size=5) + theme(axis.text=element_text(size=12),axis.title=element_text(size=14,face="bold"))
 ```
 
-Visualization and ranking of DEGs
+2.2) Visualization and ranking of DEGs
 ==================================
 Shrinkage of log2f in order to remove noise from low expressed genes thus able to see better the differences in possible DEGs.
 
-```{r, fig.asp = 1, fig.width = 20 , echo=FALSE}
+```{r, fig.asp = 1, fig.width = 10 , echo=FALSE}
 resApeT <- readRDS("~/EpigeneLabs/resApeT_stage.rds")
-plotMA(resApeT, ylim=c(-5,5), cex=.8)
+plotMA(resApeT, ylim=c(-5,5), cex=.8) + geom_point(size=5)
 abline(h=c(-1,1), col="dodgerblue", lwd=2)
 ```
 
 
 
-Volcano Plot
+2.3) Volcano Plot
 ========================================================
-```{r, fig.asp = 1, fig.width = 20 , echo=FALSE}
+```{r, fig.asp = 1, fig.width = 10 , echo=FALSE}
 library(ggplot2)
 library(DESeq2)
 
@@ -159,30 +160,31 @@ res <- DESeq2::results(data_norm, contrast = c("stage","early","late"))
 res$sig <- ifelse(res$padj<0.05, "yes","no")
 
 #plotVolcano
-ggplot(as.data.frame(res), aes(x=log2FoldChange, y= -log10(padj), color=sig)) + geom_point() + theme(axis.text=element_text(size=12),axis.title=element_text(size=14,face="bold"))
+ggplot(as.data.frame(res), aes(x=log2FoldChange, y= -log10(padj), color=sig)) + geom_point(size=5) + theme(axis.text=element_text(size=6),axis.title=element_text(size=14,face="bold"))
 
 ```
 
 
 
 
-plot most significant DEGs
+2.4) Plot most significant DEGs
 ==============================================================
 
-```{r, echo=FALSE }
+```{r,fig.asp = 1, fig.width = 10, echo=FALSE }
 par(mfrow=c(2,3))
-plotCounts(vsp, gene="ENSG00000139219.16", intgroup="stage")
-plotCounts(vsp, gene="ENSG00000197061.4", intgroup="stage")
-plotCounts(vsp, gene="ENSG00000141750.6", intgroup="stage")
-plotCounts(vsp, gene="ENSG00000167244.16", intgroup="stage")
+plotCounts(data_norm, gene="ENSG00000139219.16", intgroup="stage")
+plotCounts(data_norm, gene="ENSG00000197061.4", intgroup="stage")
+plotCounts(data_norm, gene="ENSG00000141750.6", intgroup="stage")
+plotCounts(data_norm, gene="ENSG00000167244.16", intgroup="stage")
 plotCounts(data_norm, gene="ENSG00000229344.1", intgroup="stage")
 plotCounts(data_norm, gene="ENSG00000066405.11", intgroup="stage")
 
 ```
-plot highest fold change
+2.5) Plot highest fold change
 =============================================================
 
-```{r, echo=FALSE }
+```{r,fig.asp = 1, fig.width = 10, echo=FALSE }
+par(mfrow=c(2,2))
 plotCounts(data_norm, gene="ENSG00000187772.6", intgroup="stage")
 plotCounts(data_norm, gene="ENSG00000066405.11", intgroup="stage")
 plotCounts(data_norm, gene="ENSG00000271201.1", intgroup="stage")
@@ -190,24 +192,31 @@ plotCounts(data_norm, gene="ENSG00000271201.1", intgroup="stage")
 ```
 
 
-Clustering
-==============================================================
 
 
-```{r, echo=FALSE}
-## varianceStabilizingTransformation normalization for heatmaps and clustering
-
-sampleDists <- dist(t(vst),  method = "euclidean")
-
-clusters=hclust(sampleDists)
-
-plot(clusters)
-```
-
-Heatmap
+2.6) Heatmap and Clustering
 ======================================================
-```{r}
-vsd <- vst(data_norm , blind=FALSE)
-rld <- rlog(data_norm , blind=FALSE)
-head(assay(vsd), 3)
+
+```{r,fig.asp = 1, fig.width = 10, echo=FALSE}
+library("pheatmap")
+library("RColorBrewer")
+select <- order(rowMeans(counts(data_norm,normalized=TRUE)),
+                decreasing=TRUE)[1:20]
+ntd <- readRDS("~/EpigeneLabs/normTransform_data_norm.rds")
+df <- as.data.frame(colData(data_norm)[,c("stage","ethnicity")])
+pheatmap(assay(ntd)[select,], cluster_rows=TRUE,          cluster_cols=FALSE, annotation_col=df, show_colnames=FALSE)
+
 ```
+
+
+
+
+3) Conclusion
+======================================================
+
+There are not strong gene expression differences between cancer stages
+
+Although 500 genes are observed to be DEGs --> Are these by random? 1% of total (~ 51k genes)
+
+
+Annotation and gene ontology (Enrichr...)
